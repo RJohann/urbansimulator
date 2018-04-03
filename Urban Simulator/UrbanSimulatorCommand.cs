@@ -37,10 +37,12 @@ namespace Urban_Simulator
 
             urbanModel theUrbanModel = new urbanModel();
 
-            if (!getPrecinct(theUrbanModel))                   //Ask user to select a surface representing the Precinct
+            if (!getPrecinct(theUrbanModel))               //Ask user to select a surface representing the Precinct
                 return Result.Failure;
 
-            //generateRoadNetwork()                       //Using the precint, Generate a road network
+            if (!generateRoadNetwork(theUrbanModel))       //Using the precint, Generate a road network
+                 return Result.Failure;
+
             //createBlocks()                              //Using the road network, create block
             //subdivideBlock()                            //Subdivide the block into Plots
             //instantiateBuildings()                      //Place buildings on each plot      
@@ -70,6 +72,77 @@ namespace Urban_Simulator
 
             return true;
         
+        }
+
+        public bool generateRoadNetwork(urbanModel model)
+        {
+
+            int noIterations = 4;
+
+            Random rndRoadT = new Random();
+
+            List<Curve> obstCrvs = new List<Curve>();
+
+            //extract the border from the precint surface
+            Curve[] borderCrvs = model.precintSrf.ToBrep().DuplicateNakedEdgeCurves(true, false);
+
+            foreach (Curve itCrv in borderCrvs)
+                obstCrvs.Add(itCrv);
+
+            if (borderCrvs.Length > 0)
+            {
+                int noBorders = borderCrvs.Length;
+
+                Random rnd = new Random();
+                Curve theCrv = borderCrvs[rnd.Next(noBorders)];
+
+                recursivePerpLine(theCrv, ref obstCrvs, rndRoadT, 1, noIterations);
+          
+            }
+
+            model.roadNetwork = obstCrvs;
+
+
+            if(obstCrvs.Count > borderCrvs.Length)
+                 return true;
+            else
+                return false;
+
+        }
+
+        public Boolean recursivePerpLine(Curve inpCrv, ref List<Curve> inpObst, Random inpRnd, int dir, int cnt)
+        {
+            if (cnt < 1)
+                return false;
+
+            // select random point on one of the edges
+            double t = inpRnd.Next(20,80) / 100.0;
+            Plane perpFrm;
+
+            Point3d pt = inpCrv.PointAtNormalizedLength(t);
+            inpCrv.PerpendicularFrameAt(t, out perpFrm);
+
+            Point3d pt2 = Point3d.Add(pt, perpFrm.XAxis * dir);
+
+            //draw a line perpendicular
+            Line In = new Line(pt, pt2);
+            Curve InExt = In.ToNurbsCurve().ExtendByLine(CurveEnd.End, inpObst);
+
+            if (InExt == null)
+                return false;
+
+            inpObst.Add(InExt);
+            
+            RhinoDoc.ActiveDoc.Objects.AddLine(InExt.PointAtStart, InExt.PointAtEnd);
+            RhinoDoc.ActiveDoc.Objects.AddPoint(pt);
+            RhinoDoc.ActiveDoc.Views.Redraw();
+
+            recursivePerpLine(InExt, ref inpObst, inpRnd, 1, cnt - 1);
+            recursivePerpLine(InExt, ref inpObst, inpRnd, -1, cnt - 1);
+
+            return true;
+        
+
         }
     }
 }
